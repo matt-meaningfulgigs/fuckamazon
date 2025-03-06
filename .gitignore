@@ -1,0 +1,29 @@
+# Node modules
+node_modules/
+
+# Debug log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+build/
+
+# Environment variables
+.env
+.env.*.local
+
+# Playwright artifacts
+.playwright/
+
+# Logs
+logs/
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# CSV files (backups, etc.)
+*.csv
