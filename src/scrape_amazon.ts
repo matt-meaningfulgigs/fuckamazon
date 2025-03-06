@@ -1,15 +1,31 @@
+/**
+ * @module FuckAmazon
+ * @description Script to scrape Amazon wishlists and export data to CSV.
+ * This tool extracts item names, manufacturers, options, and product links from public Amazon wishlists.
+ * It also attempts to fetch non-Amazon product URLs via DuckDuckGo. Results are saved in a CSV file.
+ */
+
 import { chromium } from "playwright-extra";
 import * as fs from "fs";
 import * as dotenv from "dotenv";
 import { createInterface } from "readline";
 import * as path from "path";
-dotenv.config();
+import imageToAscii from "image-to-ascii";
 
-// Apply the stealth plugin to bypass bot detection
+// Apply the stealth plugin to bypass bot detection.
+/**
+ * @description Load and apply stealth plugin to reduce bot detection.
+ * @remarks This is required to prevent detection by Amazon's anti-bot mechanisms.
+ */
 const stealth = require("puppeteer-extra-plugin-stealth")();
 chromium.use(stealth);
 
-// Helper function to prompt user input via the command line
+/**
+ * @function askQuestion
+ * @description Prompts the user for input via the command line.
+ * @param {string} query - The question to display to the user.
+ * @returns {Promise<string>} A promise that resolves with the user's input.
+ */
 function askQuestion(query: string): Promise<string> {
   const rl = createInterface({
     input: process.stdin,
@@ -23,16 +39,56 @@ function askQuestion(query: string): Promise<string> {
   });
 }
 
-// Interface for storing scraped wishlist item data
-interface WishlistItem {
-  itemName: string;
-  manufacturer: string;
-  options: string[];
-  productLink: string;    // Amazon URL built from the wishlist
-  nonAmazonLink: string;  // "Real" product URL from DuckDuckGo search
+/**
+ * @function convertImageToAscii
+ * @description Converts an image buffer to an ASCII art string using a temporary file.
+ * @param {Buffer} buffer - The image buffer to convert (typically a CAPTCHA screenshot).
+ * @returns {Promise<string>} A promise that resolves with the ASCII art representation.
+ */
+function convertImageToAscii(buffer: Buffer): Promise<string> {
+  return new Promise((resolve, reject) => {
+    // Define temporary file path using current working directory.
+    const tempFilePath = path.join(process.cwd(), "captcha_temp.png");
+
+    // Write image buffer to temporary file.
+    fs.writeFileSync(tempFilePath, buffer);
+
+    // Convert the image file to ASCII art.
+    imageToAscii(tempFilePath, { colored: false }, (err: any, converted: string) => {
+      // Remove the temporary file once conversion is complete.
+      fs.unlinkSync(tempFilePath);
+      if (err) {
+        reject(err);
+      } else {
+        resolve(converted);
+      }
+    });
+  });
 }
 
-// Helper function to escape CSV fields if needed
+/**
+ * @interface WishlistItem
+ * @description Defines the structure for storing scraped wishlist item data.
+ */
+interface WishlistItem {
+  /** Item name scraped from the wishlist. */
+  itemName: string;
+  /** Manufacturer name of the item. */
+  manufacturer: string;
+  /** Array of options (e.g., size, color) for the item. */
+  options: string[];
+  /** Cleaned Amazon product URL built from the wishlist data. */
+  productLink: string;
+  /** Alternative non-Amazon product URL fetched from DuckDuckGo. */
+  nonAmazonLink: string;
+}
+
+/**
+ * @function escapeCSV
+ * @description Escapes a CSV field by wrapping it in quotes and doubling internal quotes if needed.
+ * @param {string} field - The CSV field to escape.
+ * @returns {string} The escaped CSV field.
+ */
 function escapeCSV(field: string): string {
   if (field.includes('"') || field.includes(",") || field.includes("\n")) {
     field = field.replace(/"/g, '""');
@@ -41,8 +97,15 @@ function escapeCSV(field: string): string {
   return field;
 }
 
+/**
+ * @function main
+ * @description Main function that scrapes Amazon wishlists and exports the data to CSV files.
+ * The process includes loading the wishlist page, handling CAPTCHA challenges, scrolling,
+ * scraping item details, fetching alternative product links via DuckDuckGo, and saving the data.
+ * @returns {Promise<void>} A promise that resolves when the scraping and export process is complete.
+ */
 async function main() {
-  // Determine which Chrome executable to use
+  // Determine the Chrome executable to use.
   const isMac = process.platform === "darwin";
   const defaultChromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
   let executablePath = chromium.executablePath();
@@ -52,19 +115,15 @@ async function main() {
   } else {
     console.log("Using Playwright Chromium...");
   }
-
-  // Run headless if on CI or explicitly set via env variable
-  const isCI = process.env.CI === "true";
-  const HEADLESS = process.env.HEADLESS === "true" || isCI;
-
-  // Launch the browser with anti-bot settings
+  
+  // Launch the browser with anti-bot and no-sandbox arguments.
   const browser = await chromium.launch({
-    headless: HEADLESS,
+    headless: true,
     executablePath,
     args: ["--disable-blink-features=AutomationControlled", "--no-sandbox"],
   });
 
-  // Create a browser context with a custom user agent to help hide automation
+  // Create a new browser context with a custom user agent to mimic genuine user activity.
   const context = await browser.newContext({
     userAgent:
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -72,40 +131,76 @@ async function main() {
 
   const page = await context.newPage();
 
-  // Set the default wishlist URL and prompt user if desired
-  const defaultWishlistUrl = "https://www.amazon.com/hz/wishlist/ls/QF7GGWSPEL1A";
+  // Prompt user to enter one or more Amazon wishlist URLs (public wishlists only).
   const inputUrl = await askQuestion(
-    `Enter your wishlist URL(s) (comma separated, public wishlists only) (default: ${defaultWishlistUrl}): `
+    "Enter your wishlist URL(s) (comma separated, public wishlists only): "
   );
-  // Allow multiple URLs separated by a comma; if none provided, use the default
+  // Split the input on commas, trim each URL, and filter for valid Amazon wishlist URLs.
   const wishlistUrls = inputUrl.trim()
-    ? inputUrl.split(",").map(url => url.trim())
-    : [defaultWishlistUrl];
+    ? inputUrl.split(",").map(url => url.trim()).filter(url => url.startsWith("https://www.amazon.com/hz/wishlist/ls/"))
+    : [];
 
-  // Loop over each provided wishlist URL
+  // Terminate execution if no valid URL is provided.
+  if (wishlistUrls.length === 0) {
+    console.log("Error: You must provide at least one valid Amazon wishlist URL.");
+    process.exit(1);
+  }
+
+  // Process each provided wishlist URL.
   for (const wishlistUrl of wishlistUrls) {
     console.log(`Navigating to Amazon wishlist: ${wishlistUrl}`);
     await page.goto(wishlistUrl, { waitUntil: "domcontentloaded" });
 
-    // Allow initial content and lazy-loaded items to load
-    await page.waitForTimeout(20000);
+    // --- CAPTCHA HANDLING ---
+    // Check for a CAPTCHA challenge within the first 5 seconds.
+    try {
+      const captchaPrompt = await page.waitForSelector(
+        'text=Enter the characters you see below',
+        { timeout: 5000 }
+      );
+      if (captchaPrompt) {
+        console.log("CAPTCHA challenge detected.");
+        // Locate the CAPTCHA container using an XPath selector.
+        const captchaContainer = await page.$('//div[@class="a-row a-text-center"]');
+        if (captchaContainer) {
+          // Capture a screenshot of the CAPTCHA container.
+          const captchaBuffer = await captchaContainer.screenshot();
+          // Convert the CAPTCHA image to ASCII art.
+          const asciiCaptcha = await convertImageToAscii(captchaBuffer);
+          console.log("CAPTCHA (ASCII):\n", asciiCaptcha);
+          // Prompt the user to manually enter the CAPTCHA text.
+          const userCaptcha = await askQuestion("Please enter the CAPTCHA: ");
+          // Find the CAPTCHA input field.
+          const captchaInput = await page.$('input#captchacharacters');
+          if (captchaInput) {
+            // Fill in the CAPTCHA response and submit it.
+            await captchaInput.fill(userCaptcha);
+            await captchaInput.press("Enter");
+            // Allow time for the page to reload after CAPTCHA submission.
+            await page.waitForTimeout(3000);
+          }
+        }
+      }
+    } catch (e) {
+      // No CAPTCHA detected within the timeout; proceed normally.
+    }
+    // --- END CAPTCHA HANDLING ---
 
-    // Get the wishlist name from the element with id "profile-list-name"
-    // (this will be used to name the CSV file)
+    // Extract the wishlist name for naming the CSV file.
     let wishlistName = "wishlist";
     try {
-      // Using XPath to locate the wishlist name element
       const wishlistNameElem = await page.$('//span[@id="profile-list-name"]');
       if (wishlistNameElem) {
         wishlistName = (await wishlistNameElem.innerText()).trim();
-        // Sanitize wishlistName for file name (replace non-alphanumeric with underscores)
+        // Sanitize the wishlist name for safe file naming by replacing non-alphanumeric characters with underscores.
         wishlistName = wishlistName.replace(/[^a-zA-Z0-9]/g, "_");
       }
     } catch (e) {
       console.error("Could not determine wishlist name, using default name.");
     }
+    console.log(`Scraped wishlist name: ${wishlistName}`);
 
-    // Scroll until the "End of list" element is visible or until a maximum number of scrolls is reached
+    // Scroll down until the "End of list" element is visible or until maximum scroll attempts are reached.
     const endOfListSelector = 'h1:has-text("End of list")';
     const maxScrolls = 30;
     let scrollCount = 0;
@@ -118,10 +213,10 @@ async function main() {
           break;
         }
       } catch (e) {
-        // Ignore errors if the element isn't found yet.
+        // Ignore errors if the element is not yet available.
       }
       await page.evaluate(() => window.scrollBy(0, window.innerHeight));
-      await page.waitForTimeout(1000); // Allow lazy-loaded items to render
+      await page.waitForTimeout(1000); // Allow lazy-loaded items to render.
       scrollCount++;
     }
     if (endOfListVisible) {
@@ -130,14 +225,14 @@ async function main() {
       console.log("End of list not detected after maximum scrolls; proceeding.");
     }
 
-    // Array to store scraped wishlist items
+    // Initialize an array to store scraped wishlist items.
     const items: WishlistItem[] = [];
 
-    // Get all wishlist item containers (divs with an id containing "itemInfo_")
+    // Select all wishlist item containers (div elements with IDs containing "itemInfo_").
     const itemElements = await page.$$('div[id*="itemInfo_"]');
     console.log(`Found ${itemElements.length} item elements.`);
 
-    // Loop through each wishlist item to extract data
+    // Iterate through each wishlist item element to extract data.
     for (const itemElement of itemElements) {
       let itemName = "";
       let manufacturer = "";
@@ -145,10 +240,10 @@ async function main() {
       let productLink = "";
       let nonAmazonLink = "";
 
-      // Check if the element has a NON_ASIN marker (indicating a different structure)
+      // Check if the item uses a NON_ASIN structure.
       const nonAsinElement = await itemElement.$('div[data-csa-c-item-id*="NON_ASIN"]');
       if (nonAsinElement) {
-        // For NON_ASIN items, get the text from the anchor and check if it appears to be a URL.
+        // For NON_ASIN items, extract text from the anchor; if it looks like a URL, use it as the non-Amazon link.
         const itemNameElem = await itemElement.$('span[id*="itemName_"]');
         if (itemNameElem) {
           const text = (await itemNameElem.innerText()).trim();
@@ -160,7 +255,7 @@ async function main() {
           }
         }
       } else {
-        // For standard items, extract item name and product link from the anchor.
+        // For standard items, extract item name and product link from the anchor element.
         const itemNameElem = await itemElement.$('a[id*="itemName_"]');
         if (itemNameElem) {
           itemName = (await itemNameElem.innerText()).trim();
@@ -177,12 +272,12 @@ async function main() {
             }
           }
         }
-        // Get manufacturer from the byline, if available.
+        // Extract manufacturer information from the byline element.
         const bylineElem = await itemElement.$('span[id*="item-byline-"]');
         if (bylineElem) {
           manufacturer = (await bylineElem.innerText()).trim();
         }
-        // Get all options from multiple "twisterText" spans.
+        // Extract all option details from elements with ID "twisterText".
         const twisterElems = await itemElement.$$('span#twisterText');
         for (const twisterElem of twisterElems) {
           const option = (await twisterElem.innerText()).trim();
@@ -192,19 +287,22 @@ async function main() {
         }
       }
 
+      // Only add items that have at least one valid field.
       if (itemName || productLink || nonAmazonLink) {
         console.log("Scraped item:", { itemName, manufacturer, options, productLink, nonAmazonLink });
         items.push({ itemName, manufacturer, options, productLink, nonAmazonLink });
       }
     }
 
-    // For each scraped item, attempt to get a "real" product URL from DuckDuckGo
-    // (unless a non-Amazon link was already provided from the NON_ASIN branch)
+    // For each scraped item, attempt to fetch a "real" product URL from DuckDuckGo unless already provided.
     for (const item of items) {
       if (item.nonAmazonLink) continue;
-      const query = encodeURIComponent(item.itemName);
-      const duckUrl = `https://duckduckgo.com/?t=h_&q=official+site+${query}++-site%3Aamazon.*&t=h_&ia=web`;
-      console.log("Navigating to DuckDuckGo search:", duckUrl);
+      // Combine item name and options to create a targeted search query.
+      const optionsQuery = item.options.join(" ");
+      const searchQuery = `${item.itemName} ${optionsQuery}`.trim();
+      const queryEncoded = encodeURIComponent(searchQuery);
+      const duckUrl = `https://duckduckgo.com/?t=h_&q=official+site+${queryEncoded}++-site%3Aamazon.*&t=h_&ia=web`;
+      console.log(`Performing DuckDuckGo search for: "${searchQuery}"`);
       await page.goto(duckUrl, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(3000);
       try {
@@ -219,6 +317,7 @@ async function main() {
             } else {
               item.nonAmazonLink = href;
             }
+            console.log(`Found DuckDuckGo product URL: ${item.nonAmazonLink} for item: "${item.itemName}"`);
           }
         }
       } catch (e) {
@@ -226,17 +325,17 @@ async function main() {
       }
     }
 
-    // Determine the maximum number of options across all items.
+    // Determine the maximum number of options across all items to generate CSV headers.
     const maxOptions = items.reduce((max, item) => Math.max(max, item.options.length), 0);
 
-    // Build CSV header (including columns for Amazon and non-Amazon links)
+    // Build CSV header columns including dynamic option columns.
     const headerColumns = ["Item Name", "Manufacturer", "Product Link", "Non-Amazon Link"];
     for (let i = 1; i <= maxOptions; i++) {
       headerColumns.push(`Option ${i}`);
     }
     const csvRows = [headerColumns.map(escapeCSV).join(",")];
 
-    // Build CSV rows for each item.
+    // Build CSV rows for each wishlist item.
     for (const item of items) {
       const row = [
         escapeCSV(item.itemName),
@@ -250,14 +349,14 @@ async function main() {
       csvRows.push(row.join(","));
     }
 
-    // Save CSV data to a file named after the wishlist
+    // Write the CSV data to a file named after the wishlist.
     const csvData = csvRows.join("\n");
     const outputFilePath = path.join(process.cwd(), `${wishlistName}.csv`);
     fs.writeFileSync(outputFilePath, csvData, "utf8");
     console.log(`Scraped data saved to CSV file: ${outputFilePath}`);
   }
 
-  // Final wait then close the browser.
+  // Final wait to ensure any pending operations complete, then close the browser.
   await page.waitForTimeout(10000);
   await browser.close();
 }
