@@ -12,6 +12,7 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
+        "dotenv": "^16.4.7",
         "image-to-ascii": "^3.2.2",
         "playwright": "^1.50.1",
         "playwright-extra": "^4.3.6",
