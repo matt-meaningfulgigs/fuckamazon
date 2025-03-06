@@ -115,10 +115,14 @@ async function main() {
   } else {
     console.log("Using Playwright Chromium...");
   }
-  
+
+  // Set headless mode based on CI environment or HEADLESS environment variable.
+  const isCI = process.env.CI === "true";
+  const HEADLESS = process.env.HEADLESS === "true";
+
   // Launch the browser with anti-bot and no-sandbox arguments.
   const browser = await chromium.launch({
-    headless: true,
+    headless: HEADLESS,
     executablePath,
     args: ["--disable-blink-features=AutomationControlled", "--no-sandbox"],
   });
@@ -151,7 +155,6 @@ async function main() {
     console.log(`Navigating to Amazon wishlist: ${wishlistUrl}`);
     await page.goto(wishlistUrl, { waitUntil: "domcontentloaded" });
 
-    // --- CAPTCHA HANDLING ---
     // Check for a CAPTCHA challenge within the first 5 seconds.
     try {
       const captchaPrompt = await page.waitForSelector(
@@ -184,7 +187,6 @@ async function main() {
     } catch (e) {
       // No CAPTCHA detected within the timeout; proceed normally.
     }
-    // --- END CAPTCHA HANDLING ---
 
     // Extract the wishlist name for naming the CSV file.
     let wishlistName = "wishlist";
@@ -356,8 +358,7 @@ async function main() {
     console.log(`Scraped data saved to CSV file: ${outputFilePath}`);
   }
 
-  // Final wait to ensure any pending operations complete, then close the browser.
-  await page.waitForTimeout(10000);
+  // Close the browser.
   await browser.close();
 }
 
