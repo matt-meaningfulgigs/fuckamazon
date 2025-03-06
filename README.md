@@ -27,7 +27,7 @@ Amazon isn't just greedy—it props up fascist structures and crushes small busi
 1. **Clone the Repository:**
 
    ```bash
-   git clone https://github.com/mmeling/fuckamazon.git
+   git clone https://github.com/whateveraccount/fuckamazon.git
    cd fuckamazon
    ```
 
