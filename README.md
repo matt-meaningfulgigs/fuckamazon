@@ -21,23 +21,36 @@ Amazon isn't just greedy—it props up fascist structures and crushes small busi
 - **CSV Export:** Backs up your wishlist data for offline control.
 - **Dynamic File Naming:** Uses the wishlist name (from the element `//span[@id="profile-list-name"]`) to name the CSV file.
 - **Multiple Wishlists:** Accepts multiple public wishlist URLs (comma separated) for batch processing.
+- **CAPTCHA Handling:** Automatically detects CAPTCHA challenges by checking for the text "Enter the characters you see below." If detected, the tool takes a screenshot of the CAPTCHA container, converts it to ASCII art, displays it in your terminal, and prompts you to enter the CAPTCHA solution—which it then submits automatically.
 
 ## Installation
 
-1. **Clone the Repository:**
+### Prerequisites
 
-   ```bash
-   git clone https://github.com/whateveraccount/fuckamazon.git
-   cd fuckamazon
-   ```
+- **Node.js:** Ensure Node.js is installed on your system.
+- **GraphicsMagick:** The tool uses the `image-to-ascii` package, which requires GraphicsMagick for image conversion.  
+  - **macOS:** Install via Homebrew:  
+    ```bash
+    brew install graphicsmagick
+    ```
+  - **Ubuntu/Debian:**  
+    ```bash
+    sudo apt-get install graphicsmagick
+    ```
+  - **Windows:** Download and install from the [GraphicsMagick website](http://www.graphicsmagick.org/).
 
-2. **Install Dependencies:**
+### Clone the Repository
 
-   Make sure you have Node.js installed, then run:
+```bash
+git clone https://github.com/whatever/fuckamazon.git
+cd fuckamazon
+```
 
-   ```bash
-   npm install
-   ```
+### Install Dependencies
+
+```bash
+npm install
+```
 
 ## Usage
 
@@ -47,9 +60,15 @@ Run the scraper with:
 npm start
 ```
 
-You'll be prompted to enter your Amazon wishlist URL(s) (comma separated, public wishlists only). If you press Enter, the default wishlist URL is used. For each wishlist, the tool will:
+You'll be prompted to enter your Amazon wishlist URL(s) (comma separated, public wishlists only). For each wishlist, the tool will:
 
 - Load the wishlist page.
+- **CAPTCHA Handling:**  
+  If the text "Enter the characters you see below" appears within the first few seconds, the tool will:
+  - Take a screenshot of the CAPTCHA container (`//div[@class="a-row a-text-center"]`).
+  - Convert the image to ASCII art using the `image-to-ascii` package (requires GraphicsMagick).
+  - Display the ASCII art in the terminal.
+  - Prompt you to input the CAPTCHA text, which is then automatically submitted.
 - Scroll to load all items.
 - Scrape item details and convert Amazon links.
 - Use DuckDuckGo to attempt fetching a non-Amazon product link.
@@ -57,4 +76,4 @@ You'll be prompted to enter your Amazon wishlist URL(s) (comma separated, public
 
 ## Contributing
 
-Fork the repo and make it your own
+Fork the repo and make it your own. I don't care. Steal it. 
