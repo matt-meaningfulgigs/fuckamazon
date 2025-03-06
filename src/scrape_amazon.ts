@@ -13,10 +13,6 @@ import * as path from "path";
 import imageToAscii from "image-to-ascii";
 
 // Apply the stealth plugin to bypass bot detection.
-/**
- * @description Load and apply stealth plugin to reduce bot detection.
- * @remarks This is required to prevent detection by Amazon's anti-bot mechanisms.
- */
 const stealth = require("puppeteer-extra-plugin-stealth")();
 chromium.use(stealth);
 
@@ -98,6 +94,51 @@ function escapeCSV(field: string): string {
 }
 
 /**
+ * @function scrollToBottom
+ * @description Scrolls to the bottom of the page dynamically, ensuring all lazy-loaded items are fully loaded.
+ * It scrolls until the "End of list" element (identified by the selector) is found in the DOM.
+ * When found, it scrolls the element into view to ensure visibility and waits 10 seconds.
+ * @param {import('playwright').Page} page - The Playwright page instance.
+ * @returns {Promise<void>} A promise that resolves when the bottom is reached and confirmed.
+ */
+async function scrollToBottom(page: any): Promise<void> {
+  const endOfListSelector = 'h1:has-text("End of list")';
+  let previousHeight = await page.evaluate(() => document.body.scrollHeight);
+
+  while (true) {
+    // Scroll to the very bottom of the page.
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+
+    // Wait for lazy-loaded content to render.
+    await page.waitForTimeout(1000);
+
+    // Check if the "End of list" element exists in the DOM.
+    const endOfList = await page.$(endOfListSelector);
+    if (endOfList) {
+      // Scroll the "End of list" element into view.
+      await endOfList.evaluate((el: HTMLElement) => el.scrollIntoView());
+      console.log('Found "End of list" element. Waiting 10 seconds for final load...');
+      await page.waitForTimeout(10000);
+      break;
+    }
+
+    // If no new height after scrolling, check one last time.
+    let newHeight = await page.evaluate(() => document.body.scrollHeight);
+    if (newHeight === previousHeight) {
+      console.log("No change in scroll height detected; rechecking for 'End of list' element...");
+      const finalCheck = await page.$(endOfListSelector);
+      if (finalCheck) {
+        await finalCheck.evaluate((el: HTMLElement) => el.scrollIntoView());
+        console.log('Found "End of list" element on final check. Waiting 10 seconds...');
+        await page.waitForTimeout(10000);
+      }
+      break;
+    }
+    previousHeight = newHeight;
+  }
+}
+
+/**
  * @function main
  * @description Main function that scrapes Amazon wishlists and exports the data to CSV files.
  * The process includes loading the wishlist page, handling CAPTCHA challenges, scrolling,
@@ -169,11 +210,13 @@ async function main() {
           console.log("CAPTCHA (ASCII):\n", asciiCaptcha);
           // Prompt the user to manually enter the CAPTCHA text.
           const userCaptcha = await askQuestion("Please enter the CAPTCHA: ");
+          // Convert the entered CAPTCHA text to uppercase before submission.
+          const captchaText = userCaptcha.toUpperCase();
           // Find the CAPTCHA input field.
           const captchaInput = await page.$('input#captchacharacters');
           if (captchaInput) {
             // Fill in the CAPTCHA response and submit it.
-            await captchaInput.fill(userCaptcha);
+            await captchaInput.fill(captchaText);
             await captchaInput.press("Enter");
             // Allow time for the page to reload after CAPTCHA submission.
             await page.waitForTimeout(3000);
@@ -198,30 +241,9 @@ async function main() {
     }
     console.log(`Scraped wishlist name: ${wishlistName}`);
 
-    // Scroll down until the "End of list" element is visible or until maximum scroll attempts are reached.
-    const endOfListSelector = 'h1:has-text("End of list")';
-    const maxScrolls = 30;
-    let scrollCount = 0;
-    let endOfListVisible = false;
-    while (!endOfListVisible && scrollCount < maxScrolls) {
-      try {
-        const endOfList = await page.$(endOfListSelector);
-        if (endOfList && (await endOfList.isVisible())) {
-          endOfListVisible = true;
-          break;
-        }
-      } catch (e) {
-        // Ignore errors if the element is not yet available.
-      }
-      await page.evaluate(() => window.scrollBy(0, window.innerHeight));
-      await page.waitForTimeout(1000); // Allow lazy-loaded items to render.
-      scrollCount++;
-    }
-    if (endOfListVisible) {
-      console.log("Reached the end of the list.");
-    } else {
-      console.log("End of list not detected after maximum scrolls; proceeding.");
-    }
+    // Scroll dynamically until the "End of list" element is found and scrolled into view, then wait 10 seconds.
+    await scrollToBottom(page);
+    console.log("Finished scrolling: reached the bottom and confirmed 'End of list'.");
 
     // Initialize an array to store scraped wishlist items.
     const items: WishlistItem[] = [];
