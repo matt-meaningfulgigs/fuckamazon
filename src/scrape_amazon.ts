@@ -115,14 +115,10 @@ async function main() {
   } else {
     console.log("Using Playwright Chromium...");
   }
-
-  // Set headless mode based on CI environment or HEADLESS environment variable.
-  const isCI = process.env.CI === "true";
-  const HEADLESS = process.env.HEADLESS === "true";
-
+  
   // Launch the browser with anti-bot and no-sandbox arguments.
   const browser = await chromium.launch({
-    headless: HEADLESS,
+    headless: true,
     executablePath,
     args: ["--disable-blink-features=AutomationControlled", "--no-sandbox"],
   });
@@ -358,7 +354,7 @@ async function main() {
     console.log(`Scraped data saved to CSV file: ${outputFilePath}`);
   }
 
-  // Close the browser.
+  // Final wait to ensure any pending operations complete, then close the browser.
   await browser.close();
 }
 
