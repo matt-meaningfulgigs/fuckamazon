@@ -104,18 +104,21 @@ function escapeCSV(field: string): string {
  * @returns {Promise<void>} A promise that resolves when the scraping and export process is complete.
  */
 async function main() {
+  console.log("Starting the Amazon wishlist scraper...");
+
   // Determine the Chrome executable to use.
   const isMac = process.platform === "darwin";
   const defaultChromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
   let executablePath = chromium.executablePath();
   if (isMac && fs.existsSync(defaultChromePath)) {
-    console.log("Using system Chrome on macOS");
+    console.log("Step 1: Using system Chrome on macOS.");
     executablePath = defaultChromePath;
   } else {
-    console.log("Using Playwright Chromium...");
+    console.log("Step 1: Using Playwright Chromium browser.");
   }
   
   // Launch the browser with anti-bot and no-sandbox arguments.
+  console.log("Step 2: Launching headless browser...");
   const browser = await chromium.launch({
     headless: true,
     executablePath,
@@ -123,6 +126,7 @@ async function main() {
   });
 
   // Create a new browser context with a custom user agent to mimic genuine user activity.
+  console.log("Step 3: Initializing browser context...");
   const context = await browser.newContext({
     userAgent:
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -131,6 +135,7 @@ async function main() {
   const page = await context.newPage();
 
   // Prompt user to enter one or more Amazon wishlist URLs (public wishlists only).
+  console.log("Step 4: Awaiting wishlist URL(s) from user input...");
   const inputUrl = await askQuestion(
     "Enter your wishlist URL(s) (comma separated, public wishlists only): "
   );
@@ -141,13 +146,13 @@ async function main() {
 
   // Terminate execution if no valid URL is provided.
   if (wishlistUrls.length === 0) {
-    console.log("Error: You must provide at least one valid Amazon wishlist URL.");
+    console.error("Error: No valid Amazon wishlist URL provided. Please try again.");
     process.exit(1);
   }
 
   // Process each provided wishlist URL.
   for (const wishlistUrl of wishlistUrls) {
-    console.log(`Navigating to Amazon wishlist: ${wishlistUrl}`);
+    console.log(`Step 5: Navigating to your Amazon wishlist: ${wishlistUrl}`);
     await page.goto(wishlistUrl, { waitUntil: "domcontentloaded" });
 
     // Check for a CAPTCHA challenge within the first 5 seconds.
@@ -157,7 +162,7 @@ async function main() {
         { timeout: 5000 }
       );
       if (captchaPrompt) {
-        console.log("CAPTCHA challenge detected.");
+        console.log("Alert: CAPTCHA challenge detected. Preparing to solve CAPTCHA...");
         // Locate the CAPTCHA container using an XPath selector.
         const captchaContainer = await page.$('//div[@class="a-row a-text-center"]');
         if (captchaContainer) {
@@ -165,31 +170,35 @@ async function main() {
           const captchaBuffer = await captchaContainer.screenshot();
           // Convert the CAPTCHA image to ASCII art.
           const asciiCaptcha = await convertImageToAscii(captchaBuffer);
-          console.log("CAPTCHA (ASCII):\n", asciiCaptcha);
+          console.log("CAPTCHA image converted to ASCII art:\n", asciiCaptcha);
           // Prompt the user to manually enter the CAPTCHA text.
-          const userCaptcha = await askQuestion("Please enter the CAPTCHA: ");
+          const userCaptcha = await askQuestion("Please enter the CAPTCHA (letters will be converted to uppercase): ");
           // Find the CAPTCHA input field.
           const captchaInput = await page.$('input#captchacharacters');
           if (captchaInput) {
             // Fill in the CAPTCHA response in all caps and submit it.
             await captchaInput.fill(userCaptcha.toUpperCase());
             await captchaInput.press("Enter");
+            console.log("Submitted CAPTCHA response. Waiting for verification...");
             // Allow time for the page to reload after CAPTCHA submission.
             await page.waitForTimeout(3000);
             // Check if CAPTCHA challenge is still present; if so, the CAPTCHA failed.
             const captchaStillPresent = await page.$('text=Enter the characters you see below');
             if (captchaStillPresent) {
-              console.error("CAPTCHA verification failed. Exiting.");
+              console.error("Error: CAPTCHA verification failed. Please check your input and try again.");
               process.exit(1);
+            } else {
+              console.log("CAPTCHA solved successfully.");
             }
           }
         }
       }
     } catch (e) {
-      // No CAPTCHA detected within the timeout; proceed normally.
+      console.log("No CAPTCHA challenge detected. Continuing with wishlist scraping.");
     }
 
     // Extract the wishlist name for naming the CSV file.
+    console.log("Step 6: Extracting the wishlist name for file output...");
     let wishlistName = "wishlist";
     try {
       const wishlistNameElem = await page.$('//span[@id="profile-list-name"]');
@@ -199,16 +208,17 @@ async function main() {
         wishlistName = wishlistName.replace(/[^a-zA-Z0-9]/g, "_");
       }
     } catch (e) {
-      console.error("Could not determine wishlist name, using default name.");
+      console.error("Warning: Could not determine the wishlist name. Default name will be used.");
     }
-    // If the wishlist name is still the default, assume an error occurred (likely not public or CAPTCHA failed).
+    // If the wishlist name is still the default, assume an error occurred.
     if (wishlistName === "wishlist") {
-      console.error("Error: Unable to retrieve a valid wishlist name. The list may not be public or CAPTCHA verification may have failed. Exiting.");
+      console.error("Error: Unable to retrieve a valid wishlist name. The list may not be public or CAPTCHA verification may have failed. Exiting now.");
       process.exit(1);
     }
-    console.log(`Scraped wishlist name: ${wishlistName}`);
+    console.log(`Success: Wishlist name determined as "${wishlistName}".`);
 
     // Scroll down until the "End of list" element is visible or until maximum scroll attempts are reached.
+    console.log("Step 7: Scrolling to load all items in the wishlist. Please wait...");
     const endOfListSelector = 'h1:has-text("End of list")';
     const maxScrolls = 30;
     let scrollCount = 0;
@@ -229,7 +239,7 @@ async function main() {
       scrollCount++;
     }
     if (endOfListVisible) {
-      console.log("Reached the end of the list.");
+      console.log("Status: Reached the end of the wishlist.");
       // Keep scrolling to the "End of list" element until it remains continuously visible for 10 seconds.
       let continuousVisibleTime = 0;
       let lastCheck = Date.now();
@@ -248,15 +258,16 @@ async function main() {
         await page.waitForTimeout(500);
       }
     } else {
-      console.log("End of list not detected after maximum scrolls; proceeding.");
+      console.log("Notice: End of list not detected after maximum scroll attempts; proceeding with available items.");
     }
 
     // Initialize an array to store scraped wishlist items.
+    console.log("Step 8: Gathering wishlist item details...");
     const items: WishlistItem[] = [];
 
     // Select all wishlist item containers (div elements with IDs containing "itemInfo_").
     const itemElements = await page.$$('div[id*="itemInfo_"]');
-    console.log(`Found ${itemElements.length} item elements.`);
+    console.log(`Status: ${itemElements.length} item(s) found in the wishlist.`);
 
     // Iterate through each wishlist item element to extract data.
     for (const itemElement of itemElements) {
@@ -269,7 +280,6 @@ async function main() {
       // Check if the item uses a NON_ASIN structure.
       const nonAsinElement = await itemElement.$('div[data-csa-c-item-id*="NON_ASIN"]');
       if (nonAsinElement) {
-        // For NON_ASIN items, extract text from the anchor; if it looks like a URL, use it as the non-Amazon link.
         const itemNameElem = await itemElement.$('span[id*="itemName_"]');
         if (itemNameElem) {
           const text = (await itemNameElem.innerText()).trim();
@@ -294,7 +304,7 @@ async function main() {
               fullUrl.searchParams.set("th", "1");
               productLink = fullUrl.toString();
             } catch (err) {
-              console.error("Error parsing href:", href, err);
+              console.error("Error: Problem parsing the product URL. Skipping this item.", href);
             }
           }
         }
@@ -313,22 +323,21 @@ async function main() {
         }
       }
 
-      // Only add items that have at least one valid field.
       if (itemName || productLink || nonAmazonLink) {
-        console.log("Scraped item:", { itemName, manufacturer, options, productLink, nonAmazonLink });
+        console.log(`Detail: Item scraped - Name: "${itemName}", Manufacturer: "${manufacturer}"`);
         items.push({ itemName, manufacturer, options, productLink, nonAmazonLink });
       }
     }
 
     // For each scraped item, attempt to fetch a "real" product URL from DuckDuckGo unless already provided.
+    console.log("Step 9: Verifying product URLs via DuckDuckGo (if needed)...");
     for (const item of items) {
       if (item.nonAmazonLink) continue;
-      // Combine item name and options to create a targeted search query.
       const optionsQuery = item.options.join(" ");
       const searchQuery = `${item.itemName} ${optionsQuery}`.trim();
       const queryEncoded = encodeURIComponent(searchQuery);
       const duckUrl = `https://duckduckgo.com/?t=h_&q=official+site+${queryEncoded}++-site%3Aamazon.*&t=h_&ia=web`;
-      console.log(`Performing DuckDuckGo search for: "${searchQuery}"`);
+      console.log(`Info: Searching for a verified product URL for "${item.itemName}"...`);
       await page.goto(duckUrl, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(3000);
       try {
@@ -343,11 +352,11 @@ async function main() {
             } else {
               item.nonAmazonLink = href;
             }
-            console.log(`Found DuckDuckGo product URL: ${item.nonAmazonLink} for item: "${item.itemName}"`);
+            console.log(`Success: Found verified URL for "${item.itemName}".`);
           }
         }
       } catch (e) {
-        console.log("DuckDuckGo organic result not found for:", item.itemName);
+        console.log(`Notice: No verified URL found for "${item.itemName}".`);
       }
     }
 
@@ -362,6 +371,7 @@ async function main() {
     const csvRows = [headerColumns.map(escapeCSV).join(",")];
 
     // Build CSV rows for each wishlist item.
+    console.log("Step 10: Preparing data for CSV export...");
     for (const item of items) {
       const row = [
         escapeCSV(item.itemName),
@@ -379,11 +389,12 @@ async function main() {
     const csvData = csvRows.join("\n");
     const outputFilePath = path.join(process.cwd(), `${wishlistName}.csv`);
     fs.writeFileSync(outputFilePath, csvData, "utf8");
-    console.log(`Scraped data saved to CSV file: ${outputFilePath}`);
+    console.log(`Final Step: Successfully saved your wishlist data to "${outputFilePath}".`);
   }
 
+  console.log("All tasks completed. Closing browser and ending session.");
   // Final wait to ensure any pending operations complete, then close the browser.
   await browser.close();
 }
 
-main().catch((err) => console.error("Unhandled error:", err));
+main().catch((err) => console.error("Unhandled error encountered:", err));
