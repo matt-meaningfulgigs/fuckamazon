@@ -53,15 +53,19 @@ function convertImageToAscii(buffer: Buffer): Promise<string> {
     fs.writeFileSync(tempFilePath, buffer);
 
     // Convert the image file to ASCII art.
-    imageToAscii(tempFilePath, { colored: false }, (err: any, converted: string) => {
-      // Remove the temporary file once conversion is complete.
-      fs.unlinkSync(tempFilePath);
-      if (err) {
-        reject(err);
-      } else {
-        resolve(converted);
+    imageToAscii(
+      tempFilePath,
+      { colored: false },
+      (err: any, converted: string) => {
+        // Remove the temporary file once conversion is complete.
+        fs.unlinkSync(tempFilePath);
+        if (err) {
+          reject(err);
+        } else {
+          resolve(converted);
+        }
       }
-    });
+    );
   });
 }
 
@@ -108,7 +112,8 @@ async function main() {
 
   // Determine the Chrome executable to use.
   const isMac = process.platform === "darwin";
-  const defaultChromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+  const defaultChromePath =
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
   let executablePath = chromium.executablePath();
   if (isMac && fs.existsSync(defaultChromePath)) {
     console.log("Step 1: Using system Chrome on macOS.");
@@ -116,7 +121,7 @@ async function main() {
   } else {
     console.log("Step 1: Using Playwright Chromium browser.");
   }
-  
+
   // Launch the browser with anti-bot and no-sandbox arguments.
   console.log("Step 2: Launching headless browser...");
   const browser = await chromium.launch({
@@ -141,12 +146,19 @@ async function main() {
   );
   // Split the input on commas, trim each URL, and filter for valid Amazon wishlist URLs.
   const wishlistUrls = inputUrl.trim()
-    ? inputUrl.split(",").map(url => url.trim()).filter(url => url.startsWith("https://www.amazon.com/hz/wishlist/ls/"))
+    ? inputUrl
+        .split(",")
+        .map((url) => url.trim())
+        .filter((url) =>
+          url.startsWith("https://www.amazon.com/hz/wishlist/ls/")
+        )
     : [];
 
   // Terminate execution if no valid URL is provided.
   if (wishlistUrls.length === 0) {
-    console.error("Error: No valid Amazon wishlist URL provided. Please try again.");
+    console.error(
+      "Error: No valid Amazon wishlist URL provided. Please try again."
+    );
     process.exit(1);
   }
 
@@ -158,13 +170,17 @@ async function main() {
     // Check for a CAPTCHA challenge within the first 5 seconds.
     try {
       const captchaPrompt = await page.waitForSelector(
-        'text=Enter the characters you see below',
+        "text=Enter the characters you see below",
         { timeout: 5000 }
       );
       if (captchaPrompt) {
-        console.log("Alert: CAPTCHA challenge detected. Preparing to solve CAPTCHA...");
+        console.log(
+          "Alert: CAPTCHA challenge detected. Preparing to solve CAPTCHA..."
+        );
         // Locate the CAPTCHA container using an XPath selector.
-        const captchaContainer = await page.$('//div[@class="a-row a-text-center"]');
+        const captchaContainer = await page.$(
+          '//div[@class="a-row a-text-center"]'
+        );
         if (captchaContainer) {
           // Capture a screenshot of the CAPTCHA container.
           const captchaBuffer = await captchaContainer.screenshot();
@@ -172,20 +188,28 @@ async function main() {
           const asciiCaptcha = await convertImageToAscii(captchaBuffer);
           console.log("CAPTCHA image converted to ASCII art:\n", asciiCaptcha);
           // Prompt the user to manually enter the CAPTCHA text.
-          const userCaptcha = await askQuestion("Please enter the CAPTCHA (letters will be converted to uppercase): ");
+          const userCaptcha = await askQuestion(
+            "Please enter the CAPTCHA (letters will be converted to uppercase): "
+          );
           // Find the CAPTCHA input field.
-          const captchaInput = await page.$('input#captchacharacters');
+          const captchaInput = await page.$("input#captchacharacters");
           if (captchaInput) {
             // Fill in the CAPTCHA response in all caps and submit it.
             await captchaInput.fill(userCaptcha.toUpperCase());
             await captchaInput.press("Enter");
-            console.log("Submitted CAPTCHA response. Waiting for verification...");
+            console.log(
+              "Submitted CAPTCHA response. Waiting for verification..."
+            );
             // Allow time for the page to reload after CAPTCHA submission.
             await page.waitForTimeout(3000);
             // Check if CAPTCHA challenge is still present; if so, the CAPTCHA failed.
-            const captchaStillPresent = await page.$('text=Enter the characters you see below');
+            const captchaStillPresent = await page.$(
+              "text=Enter the characters you see below"
+            );
             if (captchaStillPresent) {
-              console.error("Error: CAPTCHA verification failed. Please check your input and try again.");
+              console.error(
+                "Error: CAPTCHA verification failed. Please check your input and try again."
+              );
               process.exit(1);
             } else {
               console.log("CAPTCHA solved successfully.");
@@ -194,7 +218,9 @@ async function main() {
         }
       }
     } catch (e) {
-      console.log("No CAPTCHA challenge detected. Continuing with wishlist scraping.");
+      console.log(
+        "No CAPTCHA challenge detected. Continuing with wishlist scraping."
+      );
     }
 
     // Extract the wishlist name for naming the CSV file.
@@ -208,17 +234,23 @@ async function main() {
         wishlistName = wishlistName.replace(/[^a-zA-Z0-9]/g, "_");
       }
     } catch (e) {
-      console.error("Warning: Could not determine the wishlist name. Default name will be used.");
+      console.error(
+        "Warning: Could not determine the wishlist name. Default name will be used."
+      );
     }
     // If the wishlist name is still the default, assume an error occurred.
     if (wishlistName === "wishlist") {
-      console.error("Error: Unable to retrieve a valid wishlist name. The list may not be public or CAPTCHA verification may have failed. Exiting now.");
+      console.error(
+        "Error: Unable to retrieve a valid wishlist name. The list may not be public or CAPTCHA verification may have failed. Exiting now."
+      );
       process.exit(1);
     }
     console.log(`Success: Wishlist name determined as "${wishlistName}".`);
 
     // Scroll down until the "End of list" element is visible or until maximum scroll attempts are reached.
-    console.log("Step 7: Scrolling to load all items in the wishlist. Please wait...");
+    console.log(
+      "Step 7: Scrolling to load all items in the wishlist. Please wait..."
+    );
     const endOfListSelector = 'h1:has-text("End of list")';
     const maxScrolls = 30;
     let scrollCount = 0;
@@ -258,7 +290,9 @@ async function main() {
         await page.waitForTimeout(500);
       }
     } else {
-      console.log("Notice: End of list not detected after maximum scroll attempts; proceeding with available items.");
+      console.log(
+        "Notice: End of list not detected after maximum scroll attempts; proceeding with available items."
+      );
     }
 
     // Initialize an array to store scraped wishlist items.
@@ -267,7 +301,9 @@ async function main() {
 
     // Select all wishlist item containers (div elements with IDs containing "itemInfo_").
     const itemElements = await page.$$('div[id*="itemInfo_"]');
-    console.log(`Status: ${itemElements.length} item(s) found in the wishlist.`);
+    console.log(
+      `Status: ${itemElements.length} item(s) found in the wishlist.`
+    );
 
     // Iterate through each wishlist item element to extract data.
     for (const itemElement of itemElements) {
@@ -278,7 +314,9 @@ async function main() {
       let nonAmazonLink = "";
 
       // Check if the item uses a NON_ASIN structure.
-      const nonAsinElement = await itemElement.$('div[data-csa-c-item-id*="NON_ASIN"]');
+      const nonAsinElement = await itemElement.$(
+        'div[data-csa-c-item-id*="NON_ASIN"]'
+      );
       if (nonAsinElement) {
         const itemNameElem = await itemElement.$('span[id*="itemName_"]');
         if (itemNameElem) {
@@ -304,7 +342,10 @@ async function main() {
               fullUrl.searchParams.set("th", "1");
               productLink = fullUrl.toString();
             } catch (err) {
-              console.error("Error: Problem parsing the product URL. Skipping this item.", href);
+              console.error(
+                "Error: Problem parsing the product URL. Skipping this item.",
+                href
+              );
             }
           }
         }
@@ -314,7 +355,7 @@ async function main() {
           manufacturer = (await bylineElem.innerText()).trim();
         }
         // Extract all option details from elements with ID "twisterText".
-        const twisterElems = await itemElement.$$('span#twisterText');
+        const twisterElems = await itemElement.$$("span#twisterText");
         for (const twisterElem of twisterElems) {
           const option = (await twisterElem.innerText()).trim();
           if (option) {
@@ -324,24 +365,36 @@ async function main() {
       }
 
       if (itemName || productLink || nonAmazonLink) {
-        console.log(`Detail: Item scraped - Name: "${itemName}", Manufacturer: "${manufacturer}"`);
-        items.push({ itemName, manufacturer, options, productLink, nonAmazonLink });
+        console.log(
+          `Detail: Item scraped - Name: "${itemName}", Manufacturer: "${manufacturer}"`
+        );
+        items.push({
+          itemName,
+          manufacturer,
+          options,
+          productLink,
+          nonAmazonLink,
+        });
       }
     }
 
     // For each scraped item, attempt to fetch a "real" product URL from DuckDuckGo unless already provided.
-    console.log("Step 9: Verifying product URLs via DuckDuckGo (if needed)...");
+    console.log(
+      "Step 9: Verifying product URLs via DuckDuckGo. Double check all URLs, as they may not be as accurate based on search results..."
+    );
     for (const item of items) {
       if (item.nonAmazonLink) continue;
       const optionsQuery = item.options.join(" ");
       const searchQuery = `${item.itemName} ${optionsQuery}`.trim();
       const queryEncoded = encodeURIComponent(searchQuery);
       const duckUrl = `https://duckduckgo.com/?t=h_&q=official+site+${queryEncoded}++-site%3Aamazon.*&t=h_&ia=web`;
-      console.log(`Info: Searching for a verified product URL for "${item.itemName}"...`);
       await page.goto(duckUrl, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(3000);
       try {
-        const nonAmazonAnchor = await page.waitForSelector('li[data-layout="organic"] h2 a', { timeout: 10000 });
+        const nonAmazonAnchor = await page.waitForSelector(
+          'li[data-layout="organic"] h2 a',
+          { timeout: 10000 }
+        );
         if (nonAmazonAnchor) {
           let href = await nonAmazonAnchor.getAttribute("href");
           if (href) {
@@ -352,19 +405,31 @@ async function main() {
             } else {
               item.nonAmazonLink = href;
             }
-            console.log(`Success: Found verified URL for "${item.itemName}".`);
           }
+          console.log(
+            `Found organic non-Amazon URL for ${item.itemName} URL: ${item.nonAmazonLink}. Double check URL, as it may not be as expected`
+          );
         }
       } catch (e) {
-        console.log(`Notice: No verified URL found for "${item.itemName}".`);
+        console.log(
+          `Could not find an organic non-Amazon URL for ${item.itemName}`
+        );
       }
     }
 
     // Determine the maximum number of options across all items to generate CSV headers.
-    const maxOptions = items.reduce((max, item) => Math.max(max, item.options.length), 0);
+    const maxOptions = items.reduce(
+      (max, item) => Math.max(max, item.options.length),
+      0
+    );
 
     // Build CSV header columns including dynamic option columns.
-    const headerColumns = ["Item Name", "Manufacturer", "Product Link", "Non-Amazon Link"];
+    const headerColumns = [
+      "Item Name",
+      "Manufacturer",
+      "Product Link",
+      "Non-Amazon Link",
+    ];
     for (let i = 1; i <= maxOptions; i++) {
       headerColumns.push(`Option ${i}`);
     }
@@ -389,7 +454,9 @@ async function main() {
     const csvData = csvRows.join("\n");
     const outputFilePath = path.join(process.cwd(), `${wishlistName}.csv`);
     fs.writeFileSync(outputFilePath, csvData, "utf8");
-    console.log(`Final Step: Successfully saved your wishlist data to "${outputFilePath}".`);
+    console.log(
+      `Final Step: Successfully saved your wishlist data to "${outputFilePath}".`
+    );
   }
 
   console.log("All tasks completed. Closing browser and ending session.");
