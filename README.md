@@ -19,9 +19,8 @@ Amazon isn't just greedy—it props up fascist structures and crushes small busi
 - **Amazon URL Conversion:** Cleans up raw Amazon links in case you unfortunately have no choice.
 - **Alternative Lookup:** Uses DuckDuckGo to fetch genuine non-Amazon product links.
 - **CSV Export:** Backs up your wishlist data for offline control.
-- **Dynamic File Naming:** Uses the wishlist name (from the element `//span[@id="profile-list-name"]`) to name the CSV file.
 - **Multiple Wishlists:** Accepts multiple public wishlist URLs (comma separated) for batch processing.
-- **CAPTCHA Handling:** Automatically detects CAPTCHA challenges by checking for the text "Enter the characters you see below." If detected, the tool takes a screenshot of the CAPTCHA container, converts it to ASCII art, displays it in your terminal, and prompts you to enter the CAPTCHA solution—which it then submits automatically.
+- **CAPTCHA Handling:** Automatically detects CAPTCHA challenges by checking for the text "Enter the characters you see below." If detected, the tool takes a screenshot of the CAPTCHA container, converts it to ASCII art, displays it in your terminal, and prompts you to enter the CAPTCHA solution.
 
 ## Installation
 
@@ -42,7 +41,7 @@ Amazon isn't just greedy—it props up fascist structures and crushes small busi
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/whatever/fuckamazon.git
+git clone https://github.com/whateveraccountwhocares/fuckamazon.git
 cd fuckamazon
 ```
 
@@ -60,19 +59,7 @@ Run the scraper with:
 npm start
 ```
 
-You'll be prompted to enter your Amazon wishlist URL(s) (comma separated, public wishlists only). For each wishlist, the tool will:
-
-- Load the wishlist page.
-- **CAPTCHA Handling:**  
-  If the text "Enter the characters you see below" appears within the first few seconds, the tool will:
-  - Take a screenshot of the CAPTCHA container (`//div[@class="a-row a-text-center"]`).
-  - Convert the image to ASCII art using the `image-to-ascii` package (requires GraphicsMagick).
-  - Display the ASCII art in the terminal.
-  - Prompt you to input the CAPTCHA text, which is then automatically submitted.
-- Scroll to load all items.
-- Scrape item details and convert Amazon links.
-- Use DuckDuckGo to attempt fetching a non-Amazon product link.
-- Export the data into a CSV file named after the wishlist (e.g. `My_Wishlist_Name.csv`).
+You'll be prompted to enter your Amazon wishlist URL(s) (comma separated, public wishlists only). For each wishlist, the tool may prompt you to input the CAPTCHA text. Sometimes it happens, sometimes not. 
 
 ## Contributing
 
