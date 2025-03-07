@@ -4,7 +4,7 @@
     "description": "Fuck Amazon. Scrape your Wishlists and buy from the manufacturer",
     "main": "dist/scrape_amazon.js",
     "scripts": {
-        "start": "ts-node src/scrape_amazon.ts",
+        "start": "ts-node src/fuck_amazon.ts",
         "build": "tsc",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
